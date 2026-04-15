@@ -4,6 +4,7 @@ import time
 import pypdf
 import numpy as np
 import faiss
+import json
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -67,6 +68,14 @@ def create_index(text):
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
     index.add(embeddings)
+    
+    # Save to disk to bridge multiple server workers
+    try:
+        with open("documents.json", "w") as f:
+            json.dump(documents, f)
+        faiss.write_index(index, "faiss_index.bin")
+    except Exception as e:
+        print("Failed to write memory to disk:", e)
 
 
 # -----------------------------
@@ -176,6 +185,16 @@ def clear_document():
     global index, documents
     index = None
     documents = []
+    
+    # Wipe disk persistence
+    try:
+        if os.path.exists("documents.json"):
+            os.remove("documents.json")
+        if os.path.exists("faiss_index.bin"):
+            os.remove("faiss_index.bin")
+    except Exception as e:
+        pass
+        
     return jsonify({"message": "Document cleared successfully"})
 
 
@@ -183,12 +202,24 @@ def clear_document():
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        global index
+        global index, documents
 
         if index is None:
-            return jsonify({
-                "answer": "Please upload a document first! Server memory was reset."
-            })
+            # Fallback: Attempt to reload from disk for multi-worker environments
+            if os.path.exists("documents.json") and os.path.exists("faiss_index.bin"):
+                try:
+                    with open("documents.json", "r") as f:
+                        documents = json.load(f)
+                    index = faiss.read_index("faiss_index.bin")
+                except Exception as e:
+                    print("Failed to mount from disk:", e)
+                    return jsonify({
+                        "answer": "Please upload a document first! Server memory was reset."
+                    })
+            else:
+                return jsonify({
+                    "answer": "Please upload a document first! Server memory was reset."
+                })
 
         data = request.json
         question = data.get("question")
