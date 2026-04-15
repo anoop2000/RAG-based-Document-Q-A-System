@@ -14,6 +14,8 @@ from pinecone import Pinecone
 # -----------------------------
 # CONFIG & PATHS
 # -----------------------------
+NAMESPACE = "rag-context"
+
 load_dotenv()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -83,14 +85,14 @@ def create_index(text):
 
     # Clear existing document if any before upserting new one
     try:
-        pinecone_index.delete(delete_all=True)
+        pinecone_index.delete(delete_all=True, namespace=NAMESPACE)
     except Exception as e:
         print("Pinecone delete error during creation:", e)
 
     # Upsert to Pinecone in batches
     for i in range(0, len(vectors), 100):
         batch = vectors[i:i+100]
-        pinecone_index.upsert(vectors=batch)
+        pinecone_index.upsert(vectors=batch, namespace=NAMESPACE)
 
 
 # -----------------------------
@@ -109,7 +111,8 @@ def retrieve(query, k=2):
         response = pinecone_index.query(
             vector=query_embedding[0],
             top_k=k,
-            include_metadata=True
+            include_metadata=True,
+            namespace=NAMESPACE
         )
         
         if not response.matches:
@@ -196,6 +199,8 @@ def upload():
         return jsonify({"message": "Document processed and stored in Pinecone successfully!"})
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"message": f"Upload failed: {str(e)}"}), 500
 
 
@@ -205,7 +210,7 @@ def clear_document():
     try:
         if pinecone_index is None:
             return jsonify({"message": "Fail: Pinecone client not initialized."}), 500
-        pinecone_index.delete(delete_all=True)
+        pinecone_index.delete(delete_all=True, namespace=NAMESPACE)
         return jsonify({"message": "Document cleared from Pinecone successfully"})
     except Exception as e:
         return jsonify({"message": f"Failed to clear Pinecone: {str(e)}"}), 500
@@ -222,7 +227,8 @@ def ask():
             
         # Check if Pinecone has any vectors
         stats = pinecone_index.describe_index_stats()
-        if stats.total_vector_count == 0:
+        namespaces = stats.get('namespaces', {})
+        if NAMESPACE not in namespaces or namespaces[NAMESPACE].vector_count == 0:
             return jsonify({
                 "answer": "Please upload a document first!"
             })
