@@ -54,7 +54,7 @@ def get_embeddings(text_list):
             batch = text_list[i:i + batch_size]
 
             response = client.models.embed_content(
-                model="models/embedding-001",
+                model="models/text-embedding-004",
                 contents=batch
             )
 
