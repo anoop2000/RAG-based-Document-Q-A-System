@@ -18,7 +18,7 @@ export default function RAGApp() {
   const fileInputRef = useRef(null);
   const questionInputRef = useRef(null);
 
-  const BACKEND_URL = "http://127.0.0.1:5000";
+  const BACKEND_URL = "https://rag-based-document-q-a-system-m8xw.onrender.com";
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
