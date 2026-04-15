@@ -50,15 +50,56 @@ def get_embeddings(text_list):
             model="models/embedding-001",
             contents=text_list
         )
-        return [e.values for e in response.embeddings]
+
+        embeddings = [e.values for e in response.embeddings]
+
+        print(f"✅ Generated {len(embeddings)} embeddings")
+
+        return embeddings
+
     except Exception as e:
-        print("Embedding error:", e)
+        print("❌ Embedding error:", e)
         return []
 
 
 # -----------------------------
 # CREATE PINECONE INDEX
 # -----------------------------
+# def create_index(text):
+#     if pinecone_index is None:
+#         raise Exception("Pinecone client is not initialized")
+        
+#     documents = split_text(text)
+
+#     if not documents:
+#         return
+
+#     embeddings = get_embeddings(documents)
+
+#     if not embeddings:
+#         return
+        
+#     vectors = []
+#     # Build pinecone vectors
+#     for i in range(len(documents)):
+#         vector_id = str(uuid.uuid4())
+#         vectors.append({
+#             "id": vector_id,
+#             "values": embeddings[i],
+#             "metadata": {"text": documents[i]}
+#         })
+
+#     # Clear existing document if any before upserting new one
+#     try:
+#         pinecone_index.delete(delete_all=True, namespace=NAMESPACE)
+#     except Exception as e:
+#         print("Pinecone delete error during creation:", e)
+
+#     # Upsert to Pinecone in batches
+#     for i in range(0, len(vectors), 100):
+#         batch = vectors[i:i+100]
+#         pinecone_index.upsert(vectors=batch, namespace=NAMESPACE)
+
 def create_index(text):
     if pinecone_index is None:
         raise Exception("Pinecone client is not initialized")
@@ -66,34 +107,35 @@ def create_index(text):
     documents = split_text(text)
 
     if not documents:
-        return
+        raise Exception("No text chunks created")
 
     embeddings = get_embeddings(documents)
 
-    if not embeddings:
-        return
-        
+    if not embeddings or len(embeddings) == 0:
+        raise Exception("Embedding generation failed")
+
     vectors = []
-    # Build pinecone vectors
     for i in range(len(documents)):
-        vector_id = str(uuid.uuid4())
         vectors.append({
-            "id": vector_id,
+            "id": str(uuid.uuid4()),
             "values": embeddings[i],
             "metadata": {"text": documents[i]}
         })
 
-    # Clear existing document if any before upserting new one
-    try:
-        pinecone_index.delete(delete_all=True, namespace=NAMESPACE)
-    except Exception as e:
-        print("Pinecone delete error during creation:", e)
+    # Clear old data
+    pinecone_index.delete(delete_all=True, namespace=NAMESPACE)
 
-    # Upsert to Pinecone in batches
-    for i in range(0, len(vectors), 100):
-        batch = vectors[i:i+100]
-        pinecone_index.upsert(vectors=batch, namespace=NAMESPACE)
+    # Upload
+    pinecone_index.upsert(vectors=vectors, namespace=NAMESPACE)
 
+    # 🔥 VERIFY INSERTION
+    stats = pinecone_index.describe_index_stats()
+    vector_count = stats.get("namespaces", {}).get(NAMESPACE, {}).get("vector_count", 0)
+
+    if vector_count == 0:
+        raise Exception("Vectors not stored in Pinecone")
+
+    print(f"✅ Stored {vector_count} vectors in Pinecone")
 
 # -----------------------------
 # RETRIEVE CONTEXT
@@ -196,7 +238,9 @@ def upload():
 
         create_index(text)
 
-        return jsonify({"message": "Document processed and stored in Pinecone successfully!"})
+        return jsonify({
+            "message": "Document processed and stored successfully"
+        })
 
     except Exception as e:
         import traceback
