@@ -36,7 +36,7 @@ CORS(app)
 # -----------------------------
 # TEXT SPLITTING
 # -----------------------------
-def split_text(text, chunk_size=200):
+def split_text(text, chunk_size=100):
     words = text.split()
     return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
 
@@ -45,22 +45,28 @@ def split_text(text, chunk_size=200):
 # GEMINI EMBEDDINGS (BATCH)
 # -----------------------------
 def get_embeddings(text_list):
+    all_embeddings = []
+
     try:
-        response = client.models.embed_content(
-            model="models/embedding-001",
-            contents=text_list
-        )
+        batch_size = 5  # 🔥 small batches to avoid overload
 
-        embeddings = [e.values for e in response.embeddings]
+        for i in range(0, len(text_list), batch_size):
+            batch = text_list[i:i + batch_size]
 
-        print(f"✅ Generated {len(embeddings)} embeddings")
+            response = client.models.embed_content(
+                model="models/embedding-001",
+                contents=batch
+            )
 
-        return embeddings
+            batch_embeddings = [e.values for e in response.embeddings]
+            all_embeddings.extend(batch_embeddings)
+
+        print(f"✅ Generated {len(all_embeddings)} embeddings")
+        return all_embeddings
 
     except Exception as e:
         print("❌ Embedding error:", e)
         return []
-
 
 # -----------------------------
 # CREATE PINECONE INDEX
@@ -136,6 +142,8 @@ def create_index(text):
         raise Exception("Vectors not stored in Pinecone")
 
     print(f"✅ Stored {vector_count} vectors in Pinecone")
+    print("📄 Chunks:", len(documents))
+print("🧠 Embeddings:", len(embeddings))
 
 # -----------------------------
 # RETRIEVE CONTEXT
