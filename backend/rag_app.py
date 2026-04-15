@@ -66,7 +66,7 @@ def get_embeddings(text_list):
 
     except Exception as e:
         print("❌ Embedding error:", e)
-        return []
+        raise Exception(f"Google Gemini rejected the payload: {str(e)}")
 
 # -----------------------------
 # CREATE PINECONE INDEX

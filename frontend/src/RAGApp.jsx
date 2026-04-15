@@ -47,7 +47,8 @@ export default function RAGApp() {
       await axios.post(`${BACKEND_URL}/upload`, formData);
       setUploadState({ status: 'success', message: 'Document processed successfully! Ready for your questions.' });
     } catch (err) {
-      setUploadState({ status: 'error', message: err.message || 'Upload failed due to connection error.' });
+      const serverMsg = err.response && err.response.data && err.response.data.message;
+      setUploadState({ status: 'error', message: serverMsg || err.message || 'Upload failed due to connection error.' });
     }
   };
 
