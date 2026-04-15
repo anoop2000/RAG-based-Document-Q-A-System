@@ -2,27 +2,23 @@ import os
 import io
 import time
 import pypdf
+import numpy as np
+import faiss
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-
-from sentence_transformers import SentenceTransformer
-import faiss
-import numpy as np
-
 from google import genai
 
-# Load env
+# -----------------------------
+# CONFIG
+# -----------------------------
 load_dotenv()
 
-# Configure Gemini client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = Flask(__name__)
 CORS(app)
-
-# Load embedding model
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # In-memory storage
 documents = []
@@ -30,13 +26,31 @@ index = None
 
 
 # -----------------------------
-# TEXT PROCESSING
+# TEXT SPLITTING
 # -----------------------------
 def split_text(text, chunk_size=200):
     words = text.split()
     return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
 
 
+# -----------------------------
+# GEMINI EMBEDDINGS (BATCH)
+# -----------------------------
+def get_embeddings(text_list):
+    try:
+        response = client.models.embed_content(
+            model="models/embedding-001",
+            contents=text_list
+        )
+        return np.array([e.values for e in response.embeddings])
+    except Exception as e:
+        print("Embedding error:", e)
+        return np.array([])
+
+
+# -----------------------------
+# CREATE FAISS INDEX
+# -----------------------------
 def create_index(text):
     global documents, index
 
@@ -45,26 +59,36 @@ def create_index(text):
     if not documents:
         return
 
-    embeddings = embed_model.encode(documents)
+    embeddings = get_embeddings(documents)
+
+    if embeddings.size == 0:
+        return
 
     dim = embeddings.shape[1]
     index = faiss.IndexFlatL2(dim)
-    index.add(np.array(embeddings))
+    index.add(embeddings)
 
 
-def retrieve(query, k=2):  # reduced to avoid overload
+# -----------------------------
+# RETRIEVE CONTEXT
+# -----------------------------
+def retrieve(query, k=2):
     if index is None:
         return ""
 
-    query_embedding = embed_model.encode([query])
-    distances, indices = index.search(np.array(query_embedding), k)
+    query_embedding = get_embeddings([query])
 
-    results = [documents[i] for i in indices[0]]
+    if query_embedding.size == 0:
+        return ""
+
+    distances, indices = index.search(query_embedding, k)
+
+    results = [documents[i] for i in indices[0] if i < len(documents)]
     return "\n".join(results)
 
 
 # -----------------------------
-# GEMINI WITH FALLBACK + RETRY
+# GENERATE ANSWER (WITH FALLBACK)
 # -----------------------------
 def generate_answer(context, question):
     prompt = f"""
@@ -84,7 +108,7 @@ def generate_answer(context, question):
     ]
 
     for model_name in models:
-        for attempt in range(3):  # retry each model 3 times
+        for attempt in range(3):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -94,9 +118,9 @@ def generate_answer(context, question):
 
             except Exception as e:
                 if "503" in str(e):
-                    time.sleep(2 * (attempt + 1))  # exponential backoff
+                    time.sleep(2 * (attempt + 1))  # retry delay
                 else:
-                    break  # move to next model
+                    break
 
     return "⚠️ All models are busy. Please try again later."
 
@@ -109,9 +133,10 @@ def home():
     return "RAG Backend Running ✅"
 
 
+# 📤 Upload Document
 @app.route("/upload", methods=["POST"])
 def upload():
-    global index
+    global index, documents
 
     file = request.files.get("file")
 
@@ -119,8 +144,7 @@ def upload():
         return jsonify({"message": "No file uploaded"}), 400
 
     try:
-        global documents
-        # Before processing a new document, clear the old one from memory
+        # 🔥 Reset previous document
         index = None
         documents = []
 
@@ -145,6 +169,8 @@ def upload():
     except Exception as e:
         return jsonify({"message": f"Upload failed: {str(e)}"}), 500
 
+
+# 🧹 Clear Document
 @app.route("/clear", methods=["POST"])
 def clear_document():
     global index, documents
@@ -152,6 +178,8 @@ def clear_document():
     documents = []
     return jsonify({"message": "Document cleared successfully"})
 
+
+# ❓ Ask Question
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
@@ -182,7 +210,8 @@ def ask():
 
 
 # -----------------------------
-# RUN SERVER
+# RUN SERVER (RENDER SAFE)
 # -----------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
