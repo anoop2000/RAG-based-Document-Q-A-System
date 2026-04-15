@@ -119,6 +119,11 @@ def upload():
         return jsonify({"message": "No file uploaded"}), 400
 
     try:
+        global documents
+        # Before processing a new document, clear the old one from memory
+        index = None
+        documents = []
+
         if file.filename.lower().endswith('.pdf'):
             pdf_reader = pypdf.PdfReader(io.BytesIO(file.read()))
             text = ""
@@ -140,6 +145,12 @@ def upload():
     except Exception as e:
         return jsonify({"message": f"Upload failed: {str(e)}"}), 500
 
+@app.route("/clear", methods=["POST"])
+def clear_document():
+    global index, documents
+    index = None
+    documents = []
+    return jsonify({"message": "Document cleared successfully"})
 
 @app.route("/ask", methods=["POST"])
 def ask():
