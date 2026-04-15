@@ -81,6 +81,8 @@ export default function RAGApp() {
       const res = await axios.post(`${BACKEND_URL}/ask`, { question });
       setAskState({ status: 'success', message: '' });
       setAnswer(res.data.answer);
+
+      print("Matches:", results)
       
       // Update history state
       setHistory(prev => {
