@@ -5,6 +5,7 @@ import pypdf
 import numpy as np
 import faiss
 import json
+import tempfile
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -12,8 +13,12 @@ from dotenv import load_dotenv
 from google import genai
 
 # -----------------------------
-# CONFIG
+# CONFIG & PATHS
 # -----------------------------
+TMP_DIR = tempfile.gettempdir()
+DOC_PATH = os.path.join(TMP_DIR, "documents.json")
+FAISS_PATH = os.path.join(TMP_DIR, "faiss_index.bin")
+
 load_dotenv()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -71,9 +76,9 @@ def create_index(text):
     
     # Save to disk to bridge multiple server workers
     try:
-        with open("documents.json", "w") as f:
+        with open(DOC_PATH, "w") as f:
             json.dump(documents, f)
-        faiss.write_index(index, "faiss_index.bin")
+        faiss.write_index(index, FAISS_PATH)
     except Exception as e:
         print("Failed to write memory to disk:", e)
 
@@ -188,10 +193,10 @@ def clear_document():
     
     # Wipe disk persistence
     try:
-        if os.path.exists("documents.json"):
-            os.remove("documents.json")
-        if os.path.exists("faiss_index.bin"):
-            os.remove("faiss_index.bin")
+        if os.path.exists(DOC_PATH):
+            os.remove(DOC_PATH)
+        if os.path.exists(FAISS_PATH):
+            os.remove(FAISS_PATH)
     except Exception as e:
         pass
         
@@ -206,11 +211,11 @@ def ask():
 
         if index is None:
             # Fallback: Attempt to reload from disk for multi-worker environments
-            if os.path.exists("documents.json") and os.path.exists("faiss_index.bin"):
+            if os.path.exists(DOC_PATH) and os.path.exists(FAISS_PATH):
                 try:
-                    with open("documents.json", "r") as f:
+                    with open(DOC_PATH, "r") as f:
                         documents = json.load(f)
-                    index = faiss.read_index("faiss_index.bin")
+                    index = faiss.read_index(FAISS_PATH)
                 except Exception as e:
                     print("Failed to mount from disk:", e)
                     return jsonify({
