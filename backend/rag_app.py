@@ -143,8 +143,7 @@ def create_index(text):
 
     print(f"✅ Stored {vector_count} vectors in Pinecone")
     print("📄 Chunks:", len(documents))
-print("🧠 Embeddings:", len(embeddings))
-
+    print("🧠 Embeddings:", len(embeddings))
 # -----------------------------
 # RETRIEVE CONTEXT
 # -----------------------------
