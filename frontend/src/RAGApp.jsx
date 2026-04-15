@@ -18,7 +18,7 @@ export default function RAGApp() {
   const fileInputRef = useRef(null);
   const questionInputRef = useRef(null);
 
-  const BACKEND_URL = "https://rag-based-document-q-a-system-m8xw.onrender.com";
+  const BACKEND_URL = import.meta.env.VITE_API_URL
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
