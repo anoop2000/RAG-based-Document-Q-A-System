@@ -2,6 +2,6 @@ flask
 flask-cors
 python-dotenv
 google-genai
-faiss-cpu
+pinecone
 pypdf
 numpy
